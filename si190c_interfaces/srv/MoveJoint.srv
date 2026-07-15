@@ -1,0 +1,6 @@
+# 请求：目标关节角度
+float32 target_angle
+---
+# 响应：是否成功及当前角度
+bool success
+float32 current_angle

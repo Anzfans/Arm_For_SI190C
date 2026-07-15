@@ -1,0 +1,9 @@
+# Goal: 目标旋转角度
+float32 target_angle
+---
+# Result: 最终状态
+bool success
+float32 final_angle
+---
+# Feedback: 当前旋转进度
+float32 current_angle

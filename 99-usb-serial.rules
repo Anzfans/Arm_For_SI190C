@@ -1,0 +1,8 @@
+# CH340
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="Motor", MODE="0666"
+
+# CP210x
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="Laser", MODE="0666"
+
+#Joy
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0810", ATTRS{idProduct}=="0001", SYMLINK+="joy", MODE="0666"

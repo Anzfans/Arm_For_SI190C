@@ -1,0 +1,21 @@
+joint_serial_comm:
+  ros__parameters:
+    # Serial port configuration
+    serial_port: "/dev/ttyUSB0"
+    baud_rate: 115200
+
+    # Motor configuration
+    # Joint 1 (Base): 30:1 reducer
+    # Joint 2-5 (Arm): 20:1 reducer (J2 is 50:1 in some configs)
+    # Joint 6 (End): Direct drive (1:1)
+    reducer_ratios: [30, 50, 20, 20, 20, 1]
+
+    # Motor direction: 0 = CW, 1 = CCW
+    motor_directions: [0, 0, 0, 0, 0, 0]
+
+    # Axis direction: -1 = reverse, 1 = normal
+    # This compensates for mechanical mounting orientation
+    axis_directions: [-1.0, 1.0, -1.0, -1.0, 1.0, 1.0]
+
+    # Bipolar joints: 1 = can rotate both directions (-pi to pi), 0 = unipolar (0 to 2pi)
+    bipolar_joints: [0, 0, 0, 0, 1, 0]
