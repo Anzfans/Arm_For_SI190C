@@ -8,6 +8,7 @@
  */
 
 #include <Eigen/Core>
+#include <vector>
 
 #ifndef _DH_SERVER_
 #define _DH_SERVER_
