@@ -56,10 +56,8 @@ class ArmActionServer(Node):
             return GoalResponse.REJECT
 
         self.get_logger().info(
-            'Accepted goal x=%.3f y=%.3f z=%.3f',
-            goal_request.target_x,
-            goal_request.target_y,
-            goal_request.target_z,
+            f'Accepted goal x={goal_request.target_x:.3f} '
+            f'y={goal_request.target_y:.3f} z={goal_request.target_z:.3f}'
         )
         return GoalResponse.ACCEPT
 

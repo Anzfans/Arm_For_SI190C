@@ -62,15 +62,9 @@ class PositionService(Node):
         response.success = True
         response.message = message
         self.get_logger().info(
-            'SetPosition x=%.3f y=%.3f z=%.3f q=(%.3f, %.3f, %.3f, %.3f): %s',
-            request.x,
-            request.y,
-            request.z,
-            request.qx,
-            request.qy,
-            request.qz,
-            request.qw,
-            message,
+            f'SetPosition x={request.x:.3f} y={request.y:.3f} z={request.z:.3f} '
+            f'q=({request.qx:.3f}, {request.qy:.3f}, {request.qz:.3f}, {request.qw:.3f}): '
+            f'{message}'
         )
         return response
 
