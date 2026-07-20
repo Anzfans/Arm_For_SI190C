@@ -12,6 +12,8 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveJoint.srv"
   "action/RotateJoint.action"
+  "srv/SetPosition.srv"
+  "action/MoveArm.action"
 )
 
 if(BUILD_TESTING)

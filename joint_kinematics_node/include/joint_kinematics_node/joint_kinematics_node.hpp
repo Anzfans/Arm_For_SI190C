@@ -35,6 +35,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr pose_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr subscription_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr fk_pose_pub_;
   DHServer dh_server;
 };
 

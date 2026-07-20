@@ -49,6 +49,7 @@ JointKinematicsNode::JointKinematicsNode()
     );
 
     pub_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+    fk_pose_pub_ = this->create_publisher<geometry_msgs::msg::Pose>("/fk_pose", 10);
 
     //timer_ = this->create_wall_timer(
     //        std::chrono::milliseconds(10),  // 每 10ms触发一次
@@ -108,6 +109,16 @@ void JointKinematicsNode::forwardKinematics()
     Eigen::Quaterniond q(R);
     Eigen::Vector3d t = T.topRightCorner(3, 1);
     RCLCPP_INFO(this->get_logger(), "q x: %.3f, y: %.3f, z: %.3f w: %.3f", q.x(), q.y(), q.z(), q.w());
+
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = t.x();
+    pose.position.y = t.y();
+    pose.position.z = t.z();
+    pose.orientation.x = q.x();
+    pose.orientation.y = q.y();
+    pose.orientation.z = q.z();
+    pose.orientation.w = q.w();
+    fk_pose_pub_->publish(pose);
 
     //inverseKinematics(t, q);
 }

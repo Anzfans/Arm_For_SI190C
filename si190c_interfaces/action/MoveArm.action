@@ -1,0 +1,18 @@
+float64 target_x
+float64 target_y
+float64 target_z
+float64 tqx
+float64 tqy
+float64 tqz
+float64 tqw
+---
+bool success
+float64 final_x
+float64 final_y
+float64 final_z
+string status
+---
+float64 current_x
+float64 current_y
+float64 current_z
+float64 progress
