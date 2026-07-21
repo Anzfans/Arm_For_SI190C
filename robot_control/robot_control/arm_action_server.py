@@ -1,5 +1,5 @@
-import asyncio
 import math
+import time
 
 import rclpy
 from geometry_msgs.msg import Pose
@@ -65,7 +65,7 @@ class ArmActionServer(Node):
         self.get_logger().info('Cancel request accepted.')
         return CancelResponse.ACCEPT
 
-    async def execute_callback(self, goal_handle):
+    def execute_callback(self, goal_handle):
         target = goal_handle.request
         target_pose = self._make_pose(target)
         self.pose_pub.publish(target_pose)
@@ -114,7 +114,7 @@ class ArmActionServer(Node):
             else:
                 self._publish_feedback(goal_handle, target_pose, 0.0)
 
-            await asyncio.sleep(feedback_period)
+            time.sleep(feedback_period)
 
         goal_handle.abort()
         return self._result(False, target, 'ROS shutdown before reaching target.')
@@ -179,10 +179,13 @@ def main(args=None):
     executor.add_node(node)
     try:
         executor.spin()
+    except KeyboardInterrupt:
+        pass
     finally:
         executor.shutdown()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
