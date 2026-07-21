@@ -19,3 +19,8 @@ joint_serial_comm:
 
     # Bipolar joints: 1 = can rotate both directions (-pi to pi), 0 = unipolar (0 to 2pi)
     bipolar_joints: [0, 0, 0, 0, 1, 0]
+
+    # Software limits in logical joint coordinates, radians.
+    # Keep a small margin from the measured hard limits; zero remains allowed.
+    joint_limits_min: [-6.20, 0.0, -6.20, -6.20, -3.09, 0.0]
+    joint_limits_max: [0.0, 6.20, 0.0, 0.0, 3.09, 6.20]

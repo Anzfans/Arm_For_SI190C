@@ -52,6 +52,8 @@ class JointSerialComm : public rclcpp::Node {
   uint8_t motor_dir[6];
   double axis_dir[6];
   bool bipolar[6];
+  double joint_limit_min[6];
+  double joint_limit_max[6];
   std::vector<double> rcv_pos;
   std::vector<double> snd_pos;
   std::vector<double> crt_pos;
@@ -80,6 +82,8 @@ public:
     this->declare_parameter<std::vector<long int>>("motor_directions", {0L, 0L, 0L, 0L, 1L, 0L});
     this->declare_parameter<std::vector<double>>("axis_directions", {-1.0, 1.0, -1.0, -1.0, 1.0, 1.0});
     this->declare_parameter<std::vector<long int>>("bipolar_joints", {0L, 0L, 0L, 0L, 1L, 0L});
+    this->declare_parameter<std::vector<double>>("joint_limits_min", {-6.20, 0.0, -6.20, -6.20, -3.09, 0.0});
+    this->declare_parameter<std::vector<double>>("joint_limits_max", {0.0, 6.20, 0.0, 0.0, 3.09, 6.20});
 
     std::string port;
     this->get_parameter("serial_port", port);
@@ -99,12 +103,20 @@ public:
     std::vector<long int> bipolar_vec;
     this->get_parameter("bipolar_joints", bipolar_vec);
 
+    std::vector<double> joint_limits_min_vec;
+    this->get_parameter("joint_limits_min", joint_limits_min_vec);
+
+    std::vector<double> joint_limits_max_vec;
+    this->get_parameter("joint_limits_max", joint_limits_max_vec);
+
     // Copy into fixed-size arrays
     for (int i = 0; i < 6; ++i) {
       reducer_ratio[i] = static_cast<int>(reducer_ratios_vec[i]);
       motor_dir[i]     = static_cast<uint8_t>(motor_dir_vec[i]);
       axis_dir[i]      = axis_dir_vec[i];
       bipolar[i]       = static_cast<bool>(bipolar_vec[i]);
+      joint_limit_min[i] = joint_limits_min_vec[i];
+      joint_limit_max[i] = joint_limits_max_vec[i];
     }
 
     // 创建串口驱动实例
@@ -134,6 +146,28 @@ private:
 
   int angle_to_pulse(double angle_deg) {
     return static_cast<int>(angle_deg / (2 * M_PI) * 3200);  // 假设 1 度 = 100 脉冲
+  }
+
+  double canonicalize_logical_angle(size_t index, double angle) {
+    if (bipolar[index]) {
+      return normalizeAnglePI(angle);
+    }
+
+    if (joint_limit_max[index] <= 0.0 && angle > M_PI) {
+      return angle - 2 * M_PI;
+    }
+
+    if (joint_limit_min[index] >= 0.0 && angle < -M_PI) {
+      return angle + 2 * M_PI;
+    }
+
+    return angle;
+  }
+
+  bool in_joint_limit(size_t index, double angle) {
+    constexpr double kLimitEpsilon = 1e-6;
+    return angle >= joint_limit_min[index] - kLimitEpsilon &&
+           angle <= joint_limit_max[index] + kLimitEpsilon;
   }
 
   void async_receive(){
@@ -179,14 +213,24 @@ private:
   void joint_callback(const sensor_msgs::msg::JointState::SharedPtr msg) {
     RCLCPP_INFO(this->get_logger(), "Get Command");
     for (size_t i = 0; i < std::min(msg->position.size(), size_t(6)); ++i) {
+      const double logical_angle = canonicalize_logical_angle(i, msg->position[i]);
+      if (!in_joint_limit(i, logical_angle)) {
+        RCLCPP_ERROR(this->get_logger(),
+          "joint%lu command %.3f rad is outside software limit [%.3f, %.3f]; ignored",
+          i + 1, logical_angle, joint_limit_min[i], joint_limit_max[i]);
+        continue;
+      }
+
+      const double motor_angle = logical_angle * axis_dir[i];
       if (bipolar[i]) {
         // Bipolar joint: range is (-pi, pi], direction encoded by sign
-        double cmd_angle = normalizeAnglePI(msg->position[i] * axis_dir[i]);
+        double cmd_angle = normalizeAnglePI(motor_angle);
         if (std::abs(cmd_angle) < 1e-3) cmd_angle = 0;
         double abs_angle = std::abs(cmd_angle);
         if (std::abs(snd_pos[i] - abs_angle) < 0.01) continue;
 
-        RCLCPP_INFO(this->get_logger(), "joint%lu:%f (bipolar)", i+1, cmd_angle);
+        RCLCPP_INFO(this->get_logger(), "joint%lu:%f logical=%f (bipolar)",
+                    i+1, cmd_angle, logical_angle);
         int pulse = angle_to_pulse(abs_angle * reducer_ratio[i]);
         // Direction: positive angle uses motor_dir, negative reverses it
         uint8_t dir = (cmd_angle < 0) ? motor_dir[i] : (1 - motor_dir[i]);
@@ -194,16 +238,18 @@ private:
         snd_pos[i] = abs_angle;
       } else {
         // Unipolar joint: range is (0, 2pi]
-        double cmd_angle = normalizeAngle(msg->position[i] * axis_dir[i]);
+        double cmd_angle = motor_angle;
         if (std::abs(cmd_angle) < 1e-3 || std::abs(cmd_angle - 2 * M_PI) < 1e-3)
           cmd_angle = 0;
         if (std::abs(snd_pos[i] - cmd_angle) < 0.01) continue;
 
-        RCLCPP_INFO(this->get_logger(), "joint%lu:%f", i+1, cmd_angle);
         if (cmd_angle < 0) {
-          RCLCPP_ERROR(this->get_logger(), "joint%lu:%f can't be negative!", i+1, cmd_angle);
+          RCLCPP_ERROR(this->get_logger(),
+            "joint%lu motor command %.3f rad is negative after axis conversion; ignored",
+            i+1, cmd_angle);
           continue;
         }
+        RCLCPP_INFO(this->get_logger(), "joint%lu:%f logical=%f", i+1, cmd_angle, logical_angle);
         int pulse = angle_to_pulse(cmd_angle * reducer_ratio[i]);
         send_frame(i + 1, pulse, motor_dir[i]);
         snd_pos[i] = cmd_angle;
@@ -248,7 +294,7 @@ private:
 
       int pos = (int)cmd[6] + ((int)cmd[5] << 8) + ((int)cmd[4] << 16) + ((int)cmd[3] << 24);
       int index = cmd[0] - 1;
-      if(index >= 0 && cmd[0] <= 5){
+      if(index >= 0 && index < 6){
         crt_pos[index] = double(pos) / 3200.0 / reducer_ratio[index] * 2 * M_PI;
         // For bipolar joints: cmd[2] from motor response indicates sign
         if(bipolar[index] && cmd[2] == 0x00){
