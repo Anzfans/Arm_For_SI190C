@@ -34,7 +34,7 @@ def detect_aruco_pose(
     image,
     camera_matrix,
     dist_coeffs,
-    marker_length=0.05,
+    marker_length=0.094,
     dictionary_name='DICT_4X4_50',
     marker_id=None,
 ):
@@ -140,7 +140,7 @@ def parse_args(args=None):
     parser = argparse.ArgumentParser(description='Detect ArUco markers and estimate pose.')
     parser.add_argument('--image-topic', default='/camera/image_raw')
     parser.add_argument('--intrinsics', default='results/camera_intrinsics.npz')
-    parser.add_argument('--marker-length', type=float, default=0.05)
+    parser.add_argument('--marker-length', type=float, default=0.094)
     parser.add_argument('--marker-id', type=int, default=None)
     parser.add_argument('--dictionary', default='DICT_4X4_50')
     parser.add_argument('--axis-length', type=float, default=0.03)

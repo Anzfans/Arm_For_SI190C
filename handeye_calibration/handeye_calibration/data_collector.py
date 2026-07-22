@@ -145,7 +145,7 @@ def parse_args(args=None):
     parser.add_argument('--service-name', default='/set_position')
     parser.add_argument('--intrinsics', default='results/camera_intrinsics.npz')
     parser.add_argument('--output', default='results/calibration_data.npz')
-    parser.add_argument('--marker-length', type=float, default=0.05)
+    parser.add_argument('--marker-length', type=float, default=0.094)
     parser.add_argument('--marker-id', type=int, default=None)
     parser.add_argument('--dictionary', default='DICT_4X4_50')
     parser.add_argument('--append', action='store_true')
