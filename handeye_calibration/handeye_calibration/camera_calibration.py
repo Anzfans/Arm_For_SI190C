@@ -12,7 +12,7 @@ def load_camera_intrinsics(path='results/camera_intrinsics.npz'):
     return load_intrinsics(path)
 
 
-def calibrate_camera_intrinsics(image_paths, chessboard_size=(10, 7), square_size=0.025, preview=False):
+def calibrate_camera_intrinsics(image_paths, chessboard_size=(10, 7), square_size=0.020, preview=False):
     if len(image_paths) < 3:
         raise ValueError('Need at least 3 chessboard images; 15-20 is recommended.')
 
@@ -124,7 +124,7 @@ def parse_args(args=None):
     parser.add_argument('--images', default='calibration_images/chessboard_*.png')
     parser.add_argument('--cols', type=int, default=10, help='Inner corner columns.')
     parser.add_argument('--rows', type=int, default=7, help='Inner corner rows.')
-    parser.add_argument('--square-size', type=float, default=0.025, help='Square size in meters.')
+    parser.add_argument('--square-size', type=float, default=0.020, help='Square size in meters.')
     parser.add_argument('--output', default='results/camera_intrinsics.npz')
     parser.add_argument('--preview', action='store_true')
     parser.add_argument('--undistort-dir', default=None)
