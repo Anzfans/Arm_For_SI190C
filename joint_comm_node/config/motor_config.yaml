@@ -25,12 +25,5 @@ joint_serial_comm:
     joint_limits_min: [-6.20, 0.0, -6.20, -6.20, -3.09, 0.0]
     joint_limits_max: [0.0, 6.20, 0.0, 0.0, 3.09, 6.20]
 
-    # Conservative software trajectory limits.
-    # command_rate is the interpolation update rate in Hz.
-    # max_joint_velocity limits each logical joint's command speed in rad/s.
-    # target_tolerance stops interpolation when the command is close enough.
-    # command_joint_delay_ms spaces serial frames when several joints move together.
-    command_rate: 5.0
-    max_joint_velocity: [0.08, 0.06, 0.06, 0.08, 0.08, 0.10]
-    target_tolerance: 0.01
-    command_joint_delay_ms: 20
+    # Position command speed sent to every motor, in RPM.
+    command_speed_rpm: 15

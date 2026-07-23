@@ -18,7 +18,7 @@ class ArmActionServer(Node):
 
         self.declare_parameter('position_tolerance', 0.01)
         self.declare_parameter('feedback_period', 0.2)
-        self.declare_parameter('timeout_sec', 30.0)
+        self.declare_parameter('timeout_sec', 120)
         self.declare_parameter('simulate_without_fk', True)
         self.declare_parameter('simulation_duration_sec', 5.0)
 

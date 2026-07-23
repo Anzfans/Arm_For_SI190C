@@ -25,9 +25,9 @@ def get_aruco_dictionary(name):
 
 
 def create_detector_parameters():
-    if hasattr(cv2.aruco, 'DetectorParameters'):
-        return cv2.aruco.DetectorParameters()
-    return cv2.aruco.DetectorParameters_create()
+    if hasattr(cv2.aruco, 'DetectorParameters_create'):
+        return cv2.aruco.DetectorParameters_create()
+    return cv2.aruco.DetectorParameters()
 
 
 def detect_aruco_pose(
@@ -35,8 +35,8 @@ def detect_aruco_pose(
     camera_matrix,
     dist_coeffs,
     marker_length=0.094,
-    dictionary_name='DICT_4X4_50',
-    marker_id=None,
+    dictionary_name='DICT_ARUCO_ORIGINAL',
+    marker_id=6,
 ):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     aruco_dict = get_aruco_dictionary(dictionary_name)
@@ -56,7 +56,7 @@ def detect_aruco_pose(
     if marker_id is not None:
         matches = np.where(ids_flat == marker_id)[0]
         if len(matches) == 0:
-            return None, ids_flat, corners, None
+            return None, ids_flat, None, None
         selected = int(matches[0])
 
     criteria = (
@@ -111,7 +111,10 @@ class ArucoDetectorNode(Node):
         )
 
         if T_cm is None:
-            self.get_logger().warning('No requested ArUco marker detected.')
+            if ids is None:
+                self.get_logger().warning('No ArUco marker detected.')
+            else:
+                self.get_logger().warning(f'No requested ArUco marker detected; detected ids={ids.tolist()}')
         else:
             pos = T_cm[:3, 3]
             self.get_logger().info(
@@ -141,8 +144,8 @@ def parse_args(args=None):
     parser.add_argument('--image-topic', default='/camera/image_raw')
     parser.add_argument('--intrinsics', default='results/camera_intrinsics.npz')
     parser.add_argument('--marker-length', type=float, default=0.094)
-    parser.add_argument('--marker-id', type=int, default=None)
-    parser.add_argument('--dictionary', default='DICT_4X4_50')
+    parser.add_argument('--marker-id', type=int, default=6)
+    parser.add_argument('--dictionary', default='DICT_ARUCO_ORIGINAL')
     parser.add_argument('--axis-length', type=float, default=0.03)
     parser.add_argument('--no-preview', action='store_true')
     return parser.parse_args(args)
