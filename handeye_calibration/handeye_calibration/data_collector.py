@@ -4,6 +4,7 @@ import threading
 import time
 from pathlib import Path
 
+import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Pose
@@ -78,6 +79,75 @@ class DataCollector(Node):
         self.get_logger().info(response.message)
         return True
 
+    def detect_latest_marker(self):
+        if self.latest_image is None:
+            return None, None, None
+        image = self.latest_image.copy()
+        T_cm, ids, _, pose = detect_aruco_pose(
+            image,
+            self.camera_matrix,
+            self.dist_coeffs,
+            marker_length=self.args.marker_length,
+            dictionary_name=self.args.dictionary,
+            marker_id=self.args.marker_id,
+        )
+        reprojection = pose[2] if pose is not None and len(pose) > 2 else None
+        return T_cm, ids, reprojection
+
+    def capture_stable_marker_pose(self):
+        transforms = []
+        reprojections = []
+        last_ids = None
+
+        for _ in range(self.args.stable_frames):
+            T_cm, ids, reprojection = self.detect_latest_marker()
+            if ids is not None:
+                last_ids = ids
+            if T_cm is not None:
+                transforms.append(T_cm)
+                if reprojection is not None:
+                    reprojections.append(float(reprojection))
+            time.sleep(self.args.stable_delay)
+
+        if len(transforms) < self.args.min_stable_frames:
+            self.get_logger().warning(
+                f'Only {len(transforms)}/{self.args.stable_frames} valid ArUco frames; sample skipped.'
+            )
+            return None, last_ids
+
+        translations = np.asarray([T[:3, 3] for T in transforms], dtype=np.float64)
+        translation_std = np.std(translations, axis=0)
+        z_span = float(np.max(translations[:, 2]) - np.min(translations[:, 2]))
+        std_norm = float(np.linalg.norm(translation_std))
+        mean_reprojection = float(np.mean(reprojections)) if reprojections else 0.0
+
+        if std_norm > self.args.max_translation_std or z_span > self.args.max_z_span:
+            self.get_logger().warning(
+                'ArUco pose is not stable; sample skipped. '
+                f'std_norm={std_norm:.4f} m, z_span={z_span:.4f} m, '
+                f'mean_reprojection={mean_reprojection:.2f} px'
+            )
+            return None, last_ids
+
+        if self.args.max_reprojection_error > 0.0 and mean_reprojection > self.args.max_reprojection_error:
+            self.get_logger().warning(
+                'ArUco reprojection error is too high; sample skipped. '
+                f'mean_reprojection={mean_reprojection:.2f} px'
+            )
+            return None, last_ids
+
+        median_translation = np.median(translations, axis=0)
+        selected = int(np.argmin(np.linalg.norm(translations - median_translation, axis=1)))
+        selected_T = transforms[selected]
+        pos = selected_T[:3, 3]
+        self.get_logger().info(
+            'Stable ArUco pose accepted: '
+            f'x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f} m, '
+            f'std_norm={std_norm:.4f} m, z_span={z_span:.4f} m, '
+            f'mean_reprojection={mean_reprojection:.2f} px'
+        )
+        return selected_T, last_ids
+
     def capture_sample(self):
         if self.latest_fk_pose is None:
             self.get_logger().warning('No /fk_pose received yet.')
@@ -86,16 +156,9 @@ class DataCollector(Node):
             self.get_logger().warning('No camera image received yet.')
             return False
 
-        T_cm, ids, _, _ = detect_aruco_pose(
-            self.latest_image,
-            self.camera_matrix,
-            self.dist_coeffs,
-            marker_length=self.args.marker_length,
-            dictionary_name=self.args.dictionary,
-            marker_id=self.args.marker_id,
-        )
+        T_cm, ids = self.capture_stable_marker_pose()
         if T_cm is None:
-            self.get_logger().warning('No requested ArUco marker detected; sample skipped.')
+            self.get_logger().warning('No stable requested ArUco marker detected; sample skipped.')
             return False
 
         T_be = pose_to_matrix(self.latest_fk_pose)
@@ -153,6 +216,12 @@ def parse_args(args=None):
     parser.add_argument('--poses-file', default=None, help='JSON list of {"position": [...], "orientation": [...]}')
     parser.add_argument('--settle-time', type=float, default=2.0)
     parser.add_argument('--service-timeout', type=float, default=5.0)
+    parser.add_argument('--stable-frames', type=int, default=10)
+    parser.add_argument('--min-stable-frames', type=int, default=6)
+    parser.add_argument('--stable-delay', type=float, default=0.05)
+    parser.add_argument('--max-translation-std', type=float, default=0.02)
+    parser.add_argument('--max-z-span', type=float, default=0.05)
+    parser.add_argument('--max-reprojection-error', type=float, default=3.0)
     return parser.parse_args(args)
 
 

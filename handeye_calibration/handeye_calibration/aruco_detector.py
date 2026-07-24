@@ -26,8 +26,122 @@ def get_aruco_dictionary(name):
 
 def create_detector_parameters():
     if hasattr(cv2.aruco, 'DetectorParameters_create'):
-        return cv2.aruco.DetectorParameters_create()
-    return cv2.aruco.DetectorParameters()
+        params = cv2.aruco.DetectorParameters_create()
+    else:
+        params = cv2.aruco.DetectorParameters()
+
+    tuned_values = {
+        'adaptiveThreshWinSizeMin': 3,
+        'adaptiveThreshWinSizeMax': 53,
+        'adaptiveThreshWinSizeStep': 4,
+        'minMarkerPerimeterRate': 0.03,
+        'maxMarkerPerimeterRate': 4.0,
+        'polygonalApproxAccuracyRate': 0.03,
+        'minCornerDistanceRate': 0.03,
+        'minDistanceToBorder': 3,
+        'cornerRefinementMethod': cv2.aruco.CORNER_REFINE_SUBPIX,
+        'cornerRefinementWinSize': 7,
+        'cornerRefinementMaxIterations': 50,
+        'cornerRefinementMinAccuracy': 0.001,
+        'errorCorrectionRate': 0.6,
+    }
+    for name, value in tuned_values.items():
+        if hasattr(params, name):
+            setattr(params, name, value)
+    return params
+
+
+def marker_object_points(marker_length):
+    half = marker_length / 2.0
+    return np.array([
+        [-half, half, 0.0],
+        [half, half, 0.0],
+        [half, -half, 0.0],
+        [-half, -half, 0.0],
+    ], dtype=np.float64)
+
+
+def use_fisheye_model(dist_coeffs):
+    return np.asarray(dist_coeffs).size == 4
+
+
+def undistort_marker_corners(corners, camera_matrix, dist_coeffs):
+    image_points = np.asarray(corners, dtype=np.float64).reshape(4, 2)
+    if use_fisheye_model(dist_coeffs):
+        undistorted = cv2.fisheye.undistortPoints(
+            image_points.reshape(-1, 1, 2),
+            camera_matrix,
+            np.asarray(dist_coeffs, dtype=np.float64).reshape(-1, 1),
+            P=camera_matrix,
+        )
+        return undistorted.reshape(4, 2), None
+    return image_points, dist_coeffs
+
+
+def reprojection_error(object_points, image_points, rvec, tvec, camera_matrix, dist_coeffs):
+    projected, _ = cv2.projectPoints(
+        object_points,
+        rvec,
+        tvec,
+        camera_matrix,
+        dist_coeffs,
+    )
+    projected = projected.reshape(-1, 2)
+    image_points = np.asarray(image_points, dtype=np.float64).reshape(-1, 2)
+    return float(np.sqrt(np.mean(np.sum((projected - image_points) ** 2, axis=1))))
+
+
+def estimate_marker_pose(corners, marker_length, camera_matrix, dist_coeffs):
+    object_points = marker_object_points(marker_length)
+    image_points, pose_dist_coeffs = undistort_marker_corners(
+        corners,
+        camera_matrix,
+        dist_coeffs,
+    )
+
+    success, rvec, tvec = cv2.solvePnP(
+        object_points,
+        image_points,
+        camera_matrix,
+        pose_dist_coeffs,
+        flags=cv2.SOLVEPNP_ITERATIVE,
+    )
+    if not success:
+        raise RuntimeError('solvePnP failed for detected ArUco marker')
+
+    error = reprojection_error(
+        object_points,
+        image_points,
+        rvec,
+        tvec,
+        camera_matrix,
+        pose_dist_coeffs,
+    )
+    return rvec, tvec, error
+
+
+def draw_pose_axes(image, camera_matrix, dist_coeffs, rvec, tvec, axis_length):
+    if use_fisheye_model(dist_coeffs):
+        axis_points = np.array([
+            [0.0, 0.0, 0.0],
+            [axis_length, 0.0, 0.0],
+            [0.0, axis_length, 0.0],
+            [0.0, 0.0, axis_length],
+        ], dtype=np.float64).reshape(-1, 1, 3)
+        points, _ = cv2.fisheye.projectPoints(
+            axis_points,
+            rvec,
+            tvec,
+            camera_matrix,
+            np.asarray(dist_coeffs, dtype=np.float64).reshape(-1, 1),
+        )
+        points = np.round(points.reshape(-1, 2)).astype(int)
+        origin = tuple(points[0])
+        cv2.line(image, origin, tuple(points[1]), (0, 0, 255), 2)
+        cv2.line(image, origin, tuple(points[2]), (0, 255, 0), 2)
+        cv2.line(image, origin, tuple(points[3]), (255, 0, 0), 2)
+    else:
+        cv2.drawFrameAxes(image, camera_matrix, dist_coeffs, rvec, tvec, axis_length)
 
 
 def detect_aruco_pose(
@@ -68,14 +182,14 @@ def detect_aruco_pose(
         cv2.cornerSubPix(gray, corner, (5, 5), (-1, -1), criteria)
 
     selected_corners = [corners[selected]]
-    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-        selected_corners,
+    rvec, tvec, error = estimate_marker_pose(
+        selected_corners[0],
         marker_length,
         camera_matrix,
         dist_coeffs,
     )
-    T_cm = rvec_tvec_to_matrix(rvecs[0], tvecs[0])
-    return T_cm, ids_flat, selected_corners[0], (rvecs[0], tvecs[0])
+    T_cm = rvec_tvec_to_matrix(rvec, tvec)
+    return T_cm, ids_flat, selected_corners[0], (rvec, tvec, error)
 
 
 def draw_detection(image, ids, corners, pose, camera_matrix, dist_coeffs, axis_length):
@@ -84,8 +198,8 @@ def draw_detection(image, ids, corners, pose, camera_matrix, dist_coeffs, axis_l
         draw_ids = np.asarray(ids, dtype=np.int32).reshape(-1, 1)
         cv2.aruco.drawDetectedMarkers(vis, [corners], draw_ids[:1])
     if pose is not None:
-        rvec, tvec = pose
-        cv2.drawFrameAxes(vis, camera_matrix, dist_coeffs, rvec, tvec, axis_length)
+        rvec, tvec = pose[:2]
+        draw_pose_axes(vis, camera_matrix, dist_coeffs, rvec, tvec, axis_length)
     return vis
 
 
@@ -117,9 +231,11 @@ class ArucoDetectorNode(Node):
                 self.get_logger().warning(f'No requested ArUco marker detected; detected ids={ids.tolist()}')
         else:
             pos = T_cm[:3, 3]
+            reproj = pose[2] if pose is not None and len(pose) > 2 else float('nan')
             self.get_logger().info(
                 f'Detected marker. C_T_O translation: '
-                f'x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f} m'
+                f'x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f} m, '
+                f'reprojection_error={reproj:.2f} px'
             )
 
         if not self.args.no_preview:
